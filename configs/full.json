@@ -1,0 +1,26 @@
+{
+  "datasets": ["minesweeper", "roman-empire"],
+  "models": ["mlp", "gcn", "global", "fixed", "learned", "proposed", "h2gcn"],
+  "trials": 12,
+  "tune_splits": [0, 1, 2],
+  "final_splits": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+  "seed_base": 42,
+  "search_seed": 2026,
+  "epochs": 1000,
+  "patience": 100,
+  "defaults": {"checkpoint_attention": true},
+  "search": {
+    "hidden": [64, 128], "layers": [1, 2, 3],
+    "dropout": [0.0, 0.3, 0.5], "lr": [0.001, 0.003],
+    "l2": [0.0, 0.00001, 0.0001], "k": [8, 16, 32],
+    "residual": [false, true], "layernorm": [false, true]
+  },
+  "h2_search": {
+    "hidden": [64, 128], "layers": [1, 2], "dropout": [0.0, 0.5],
+    "lr": [0.001, 0.01], "l2": [0.0, 0.0005]
+  },
+  "sensitivity_k": [8, 16, 32],
+  "extensions": [],
+  "extra_seed_bases": []
+}
+

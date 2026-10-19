@@ -1,0 +1,567 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T5]{fontenc}
+\usepackage[vietnamese]{babel}
+
+\usepackage{amsmath,amssymb,amsfonts,amsthm}
+\usepackage{geometry}
+
+\usepackage{url}
+\usepackage{fancyhdr}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{hyperref}
+
+\hypersetup{
+    colorlinks=false,
+    pdfborder={0 0 0}
+}
+
+% Header and Footer setup
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textit{Học máy nâng cao - Project Proposal}}
+\fancyfoot[C]{\thepage}
+\fancyfoot[R]{\textit{Thai V. Nguyen}}
+\renewcommand{\headrulewidth}{0.8pt}
+\renewcommand{\footrulewidth}{0.8pt}
+
+% Style for first page
+\fancypagestyle{plain}{
+    \fancyhf{}
+    \fancyfoot[C]{\thepage}
+    \renewcommand{\headrulewidth}{0pt}
+    \renewcommand{\footrulewidth}{0pt}
+}
+
+% Numbering definitions
+\numberwithin{equation}{section}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Định nghĩa}[section]
+\newtheorem{remark}{Nhận xét}[section]
+
+% Operator definitions
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator{\softmax}{softmax}
+\DeclareMathOperator{\softplus}{softplus}
+\DeclareMathOperator{\Standardize}{Standardize}
+\DeclareMathOperator{\Spearman}{Spearman}
+
+% Algorithm setup
+\renewcommand{\algorithmicrequire}{\textbf{Require:}}
+\renewcommand{\algorithmicensure}{\textbf{Ensure:}}
+
+\title{\textbf{\Large GNN lai cục bộ-toàn cục với cổng theo nút dựa trên proxy homophily không nhãn cho phân loại nút trên đồ thị heterophilic}}
+\author{Thai V. Nguyen}
+\date{Ngày 1 tháng 9 năm 2026}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{plain}
+
+\tableofcontents
+\clearpage
+
+\section{Động lực, phạm vi và liên hệ với môn học}
+Đề tài nghiên cứu phân loại nút khi các nút nối với nhau không nhất thiết có cùng nhãn. Thách thức là lựa chọn thông tin lân cận phù hợp cho từng nút: phép tổng hợp cục bộ có thể hữu ích ở một vùng nhưng làm trộn tín hiệu khác lớp ở vùng khác. Dự án kiểm tra liệu một thống kê tương đồng đặc trưng không dùng nhãn có giúp điều khiển việc kết hợp thông tin cục bộ và không cục bộ hay không.
+
+Đề tài có chiều sâu phù hợp với một đồ án Học máy nâng cao thông qua bốn nội dung: học biểu diễn trên đồ thị; attention thưa theo tập ứng viên; cơ chế kết hợp hai nhánh bằng cổng khả vi được tối ưu đầu cuối; và thiết kế thực nghiệm có đối chứng, phân tích sai số và chi phí tính toán. Phần nâng cao nằm ở việc giải thích giả định quy nạp, kiểm tra cơ chế và giới hạn tổng quát hóa, thay vì chỉ chạy lại một mô hình có sẵn. Việc đối chiếu với yêu cầu chấm điểm cụ thể cần dựa trên đề cương của giảng viên; bản đề xuất này chưa giả định một rubric riêng của học phần.
+
+\paragraph{Phạm vi đóng góp.}
+Dự án là một nghiên cứu thực nghiệm có cải tiến kiến trúc ở quy mô học phần. Đóng góp trọng tâm là kiểm chứng đường tín hiệu proxy trong cổng theo nút. Phạm vi CPU thu gọn dùng Minesweeper làm dữ liệu chính và Roman-empire làm mở rộng; kết quả trên một đồ thị chưa đủ để kết luận cho mọi đồ thị heterophilic hoặc cho thiết lập inductive với nút mới.
+
+\section{Công trình liên quan và vị trí của đề tài}
+GCN~\cite{kipf2017gcn} và GAT~\cite{velickovic2018gat} cung cấp hai cơ chế tổng hợp lân cận làm cơ sở cho nhánh cục bộ. Geom-GCN~\cite{pei2020geom} khai thác lân cận trong không gian biểu diễn; H$_2$GCN~\cite{zhu2020h2gcn} nhấn mạnh việc tách thông tin của chính nút và lân cận, kết hợp lân cận bậc cao và biểu diễn trung gian. Vì vậy, cần một đối chứng chuyên cho heterophily để tránh chỉ chứng minh cải thiện so với GCN đơn giản.
+
+GraphGPS~\cite{rampasek2022gps} đã kết hợp message passing cục bộ với attention toàn cục. Kiến trúc lai tự nó không phải đóng góp mới của dự án. Khác biệt được khảo sát ở đây là tập ứng viên ngoài lân cận một bước được cố định theo đặc trưng và một đường proxy vô hướng đi trực tiếp vào cổng theo nút. Đây là giả thuyết thiết kế cần kiểm chứng, chưa phải khẳng định tính mới tuyệt đối so với toàn bộ nghiên cứu trước đó.
+
+Benchmark của Platonov và cộng sự~\cite{platonov2023critical} cung cấp dữ liệu và giao thức đánh giá cho heterophily, đồng thời cho thấy tầm quan trọng của baseline được tinh chỉnh phù hợp. Dự án kế thừa nguyên tắc này và tập trung so sánh các cơ chế kết hợp trong cùng điều kiện thực nghiệm.
+
+\section{Định nghĩa bài toán}
+
+\subsection{Ký hiệu}
+Cho một đồ thị $G = (V, E)$, $V = \{v_1, \dots, v_N\}$ với $N = |V|$ nút và $E$ là tập cạnh. Với các bộ dữ liệu chính được sử dụng trong dự án, $G$ được xét dưới dạng đồ thị vô hướng.
+
+Gọi:
+\begin{itemize}
+    \item $\mathbf{X} \in \mathbb{R}^{N \times d}$ là ma trận đặc trưng nút, trong đó hàng thứ $v$ là vector $\mathbf{x}_v \in \mathbb{R}^d$ của nút $v$;
+    \item $\mathbf{A} \in \{0, 1\}^{N \times N}$ là ma trận kề, với
+    \begin{equation}
+    A_{uv} = \begin{cases}
+    1, & \text{nếu } \{u, v\} \in E, \\
+    0, & \text{ngược lại;}
+    \end{cases}
+    \end{equation}
+    \item $\mathcal{N}(v) = \{u \in V : \{u, v\} \in E\}$ là tập lân cận một bước;
+    \item $d_v = |\mathcal{N}(v)|$ là bậc của nút $v$;
+    \item $y_v \in \{1, \dots, C\}$ là nhãn thật của nút $v$ trong bài toán đa lớp; với bài toán nhị phân, nhãn được mã hóa thành $y_v\in\{0,1\}$.
+\end{itemize}
+
+Tập nút được chia thành $V_{\text{train}}, V_{\text{val}}, V_{\text{test}}$ (tương ứng với tập nút huấn luyện, kiểm định và kiểm tra) thỏa mãn
+\begin{equation}
+V_{\text{train}} \cap V_{\text{val}} = V_{\text{train}} \cap V_{\text{test}} = V_{\text{val}} \cap V_{\text{test}} = \emptyset
+\end{equation}
+và
+\begin{equation}
+V_{\text{train}} \cup V_{\text{val}} \cup V_{\text{test}} = V.
+\end{equation}
+
+\subsection{Bài toán phân loại nút}
+Cho đồ thị $G = (V, E)$, ma trận đặc trưng $\mathbf{X}$ và nhãn $\{y_v : v \in V_{\text{train}}\}$. Trong thiết lập transductive semi-supervised node classification, $\mathbf{A}$ và $\mathbf{X}$ của toàn bộ đồ thị được quan sát trong quá trình huấn luyện, trong khi đó, nhãn của $V_{\text{train}}$ được sử dụng để tối ưu tham số. Mục tiêu là học một hàm $f_\Theta : (\mathbf{A}, \mathbf{X}) \mapsto \mathbf{P} \in [0, 1]^{N \times C}$, trong đó $P_{vc}$ là xác suất nút $v$ thuộc lớp $c$ được định nghĩa như sau:
+\begin{equation}
+P_{vc} = P_\Theta(y_v = c \mid \mathbf{A}, \mathbf{X}), \quad \sum_{c=1}^C P_{vc} = 1.
+\end{equation}
+
+Tham số mô hình được học bằng
+\begin{equation}
+\Theta^* = \arg\min_\Theta \mathcal{L}_{\text{train}}(\Theta).
+\end{equation}
+Tập $V_{\text{val}}$ chỉ được sử dụng để lựa chọn mô hình và siêu tham số, trong khi $V_{\text{test}}$ chỉ được sử dụng để đánh giá khả năng tổng quát hóa cuối cùng.
+
+\subsection{Định lượng homophily}
+
+Các thống kê homophily được tính trên đồ thị đơn vô hướng, không chứa self-loop và mỗi cạnh chỉ được đếm một lần. Self-loop phục vụ truyền thông điệp được thêm riêng trong mô hình. Các tỷ lệ dưới đây yêu cầu $|E|>0$; adjusted homophily chỉ xác định khi mẫu số khác $0$. Thống kê sử dụng nhãn ngoài tập train chỉ được tính ở giai đoạn phân tích hậu nghiệm, sau khi khóa mô hình.
+
+\begin{definition}[Edge homophily]
+Edge homophily của đồ thị $G$ được định nghĩa bởi
+\begin{equation}
+h_{\text{edge}}(G) = \frac{|\{\{u, v\} \in E : y_u = y_v\}|}{|E|}.
+\end{equation}
+Đại lượng này biểu diễn tỷ lệ cạnh nối hai nút cùng nhãn.
+\end{definition}
+
+\begin{definition}[Local node homophily]
+Với một nút $v$ có $d_v > 0$, local node homophily của $v$ được định nghĩa bởi
+\begin{equation}
+h_{\text{node}}(v) = \frac{1}{d_v} \sum_{u \in \mathcal{N}(v)} \mathbb{I}[y_u = y_v].
+\end{equation}
+Đặt $V_+ = \{v \in V : d_v > 0\}$, node homophily trung bình của đồ thị được xác định bởi
+\begin{equation}
+h_{\text{node}}(G) = \frac{1}{|V_+|} \sum_{v \in V_+} h_{\text{node}}(v).
+\end{equation}
+\end{definition}
+
+\begin{remark}
+Đại lượng $h_{\text{node}}(v)$ phụ thuộc trực tiếp vào nhãn thật của các nút lân cận. Vì vậy, trong dự án này nó chỉ được sử dụng như một oracle quantity cho phân tích hậu nghiệm và tuyệt đối không được đưa vào mô hình trong quá trình huấn luyện hoặc suy luận.
+\end{remark}
+
+Edge homophily có cách diễn giải trực quan nhưng không có cùng baseline khi số lớp hoặc mức mất cân bằng lớp thay đổi. Vì lý do đó, ta đề xuất sử dụng adjusted homophily khi cần so sánh mức homophily giữa các đồ thị.
+
+\begin{definition}[Adjusted homophily]
+Với $D_c = \sum_{v: y_v=c} d_v$ là tổng bậc của các nút thuộc lớp $c$, đặt
+\begin{equation}
+\bar{p}(c) = \frac{D_c}{2|E|}.
+\end{equation}
+Adjusted homophily được định nghĩa bởi
+\begin{equation}
+h_{\text{adj}}(G) = \frac{h_{\text{edge}}(G) - \sum_{c=1}^C \bar{p}(c)^2}{1 - \sum_{c=1}^C \bar{p}(c)^2}.
+\end{equation}
+\end{definition}
+
+\begin{remark}
+Trong dự án này không sử dụng quy tắc $h_{\text{edge}} < 0.5$ để định nghĩa một đồ thị là heterophilic. Nguyên nhân là edge homophily phụ thuộc vào số lớp và phân bố lớp. Do đó, một ngưỡng cố định như $0.5$ không tạo ra một tiêu chuẩn thống nhất giữa các bộ dữ liệu . Thay vào đó, mức độ heterophily của mỗi bộ dữ liệu được mô tả thông qua nhiều thống kê như $h_{\text{edge}}$ và $h_{\text{adj}}$.
+\end{remark}
+
+Một đặc điểm quan trọng của bài toán là $h_{\text{node}}(v)$ có thể biến thiên đáng kể giữa các nút trong cùng một đồ thị. Do đó, ngay cả khi một đồ thị có mức heterophily cao ở cấp độ toàn cục, một số nút vẫn có thể nằm trong các lân cận tương đối homophilic, trong khi các nút khác nằm trong các vùng mạnh về heterophily. Quan sát này tạo động lực cho một cơ chế thích ứng ở cấp độ nút thay vì sử dụng cùng một chiến lược tổng hợp cho toàn bộ đồ thị.
+
+\section{Câu hỏi nghiên cứu và mục tiêu dự án}
+Dự án tập trung trả lời 3 câu hỏi nghiên cứu sau:
+\begin{itemize}
+    \item Tín hiệu tương đồng đặc trưng cục bộ không nhãn có tương quan với local label homophily thật hay không? Quan trọng hơn, nó có dự đoán được lợi ích tương đối của nhánh cục bộ so với nhánh phi cục bộ hay không?
+    \item Việc đưa tín hiệu proxy homophily tường minh vào một node-wise gate có cải thiện hiệu quả phân loại so với local-only, global-only, fixed fusion và learned gate không sử dụng proxy hay không, khi tất cả các phương pháp dùng cùng cấu hình chung và giới hạn huấn luyện?
+    \item Restricted non-local attention sử dụng Top-$k$ nút tương đồng về đặc trưng có tạo ra trade-off hợp lý giữa hiệu quả dự đoán và chi phí tính toán so với random-$k$, local-only và, trên các đồ thị đủ nhỏ, full global attention hay không?
+\end{itemize}
+
+\section{Phương pháp đề xuất}
+
+\subsection{Kiến trúc tổng thể}
+Mô hình đề xuất gồm 3 thành phần chính:
+\begin{enumerate}
+    \item[(i)] một nhánh cục bộ dựa trên message-passing GNN,
+    \item[(ii)] một nhánh toàn cục dựa trên restricted attention,
+    \item[(iii)] một node-wise gate kết hợp 2 nhánh và nhận thêm một proxy homophily không nhãn dưới dạng tín hiệu tường minh.
+\end{enumerate}
+
+Đầu tiên, đặc trưng gốc được ánh xạ vào cùng một không gian tiềm ẩn
+\begin{equation}
+\mathbf{H}^{(0)} = \phi_{\text{in}}(\mathbf{X}) \in \mathbb{R}^{N \times d_h}.
+\end{equation}
+Việc sử dụng cùng một embedding dimension cho hai nhánh giúp phép kết hợp sau đó được xác định một cách nhất quán.
+
+\subsection{Nhánh cục bộ}
+Nhánh cục bộ sử dụng GCN~\cite{kipf2017gcn} làm kiến trúc mặc định. Đặt $\tilde{\mathbf{A}} = \mathbf{A} + \mathbf{I}$ và $\tilde{D}_{ii} = \sum_j \tilde{A}_{ij}$. Một lớp GCN được viết dưới dạng
+\begin{equation}
+\mathbf{H}^{(\ell+1)} = \phi\left(\tilde{\mathbf{D}}^{-1/2}\tilde{\mathbf{A}}\tilde{\mathbf{D}}^{-1/2}\mathbf{H}^{(\ell)}\mathbf{W}^{(\ell)}\right).
+\end{equation}
+Sau $L_{\text{local}}$ lớp,
+\begin{equation}
+\mathbf{z}_v^L = \mathbf{H}_v^{(L_{\text{local}})}.
+\end{equation}
+
+\begin{remark}
+GCN được lựa chọn vì đây là baseline message-passing chuẩn; nghiên cứu benchmark~\cite{platonov2023critical} cũng cho thấy cần tinh chỉnh các GNN thông dụng trước khi kết luận về ưu thế của mô hình chuyên biệt. Bản thu gọn cố định cấu hình để kiểm tra cơ chế trong ngân sách CPU; vì chưa tinh chỉnh đầy đủ, không xem kết quả là bằng chứng về ưu thế so với baseline tối ưu.
+\end{remark}
+
+Ở đây $\phi$ là ReLU; ký hiệu $\sigma$ trong cổng và bộ phân loại nhị phân được dành cho sigmoid. Ngoài GCN, GAT~\cite{velickovic2018gat} được xem xét trong thí nghiệm mở rộng để kiểm tra độ nhạy theo bộ mã hóa cục bộ. Với $\mathcal{N}^+(i)=\mathcal{N}(i)\cup\{i\}$ và $j\in\mathcal{N}^+(i)$, hệ số attention có dạng
+\begin{equation}
+ a_{ij} = \frac{\exp\left(\text{LeakyReLU}\left(\mathbf{a}^\top[\mathbf{W}\mathbf{h}_i \,\|\, \mathbf{W}\mathbf{h}_j]\right)\right)}{\sum_{k \in \mathcal{N}^+(i)} \exp\left(\text{LeakyReLU}\left(\mathbf{a}^\top[\mathbf{W}\mathbf{h}_i \,\|\, \mathbf{W}\mathbf{h}_k]\right)\right)}.
+\end{equation}
+
+\subsection{Nhánh không cục bộ với restricted attention}
+Full self-attention trên toàn bộ $N$ nút cần xét $N^2$ cặp nút. Để giới hạn chi phí, với mỗi nút $v$, chỉ lựa chọn $k \ll N$ ứng viên phi cục bộ. Việc hạn chế ứng viên có giúp loại bỏ thông tin không hữu ích hay không là câu hỏi thực nghiệm.
+\medskip
+
+Để nhánh attention thực sự biểu diễn tín hiệu ngoài lân cận một bước,
+ta loại nút $v$ và các nút kề trực tiếp khỏi tập ứng viên. Đặt
+\[
+\mathcal{U}(v)
+=
+V \setminus \bigl(\{v\}\cup\mathcal{N}(v)\bigr),
+\qquad
+k_v=\min\{k,|\mathcal{U}(v)|\}.
+\]
+Tập ứng viên gồm tối đa $k$ nút trong $\mathcal{U}(v)$ có độ tương đồng
+cosine với $v$ cao nhất:
+\[
+\mathcal{C}_k(v)
+=
+\operatorname{TopK}_{u\in\mathcal{U}(v),\,k_v}
+\left(\bar{x}_v^\top\bar{x}_u\right).
+\]
+Ở đây $\bar{x}_v$ là đặc trưng chuẩn hóa $\ell_2$ được định nghĩa ở mục proxy. Khi similarity bằng nhau, phá hòa bằng thứ tự nút được xáo trộn với seed cố định, không dùng nhãn; báo cáo tỷ lệ hòa, đặc biệt với đặc trưng rời rạc của Minesweeper. Nếu $\mathcal{U}(v)=\varnothing$, ta quy ước $\mathbf{z}_v^G=\mathbf{0}$.
+Trong các bộ dữ liệu thực nghiệm, điều kiện này sẽ được kiểm tra trước
+khi huấn luyện.
+
+Các nút lân cận một bước bị loại khỏi $\mathcal{C}_k(v)$ nhằm giảm sự trùng lặp trực tiếp giữa nhánh cục bộ và nhánh toàn cục.
+
+\begin{remark}
+Một nút nằm ngoài $\mathcal{N}(v)$ chưa chắc đã là một nút rất xa theo khoảng cách đồ thị. Nó có thể chỉ cách $v$ hai bước. Vì vậy, $\mathcal{C}_k(v)$ được gọi là tập ứng viên không cục bộ thay vì mặc định gọi là tập các phần tử xa đồ thị. (Ablation: kiểm tra thêm trường hợp loại cả lân cận hai bước)
+\end{remark}
+
+Attention một đầu được thực hiện trên các hidden representation, với $d_k=d_h$, $\mathbf{W}_Q,\mathbf{W}_K,\mathbf{W}_V\in\mathbb{R}^{d_h\times d_h}$, nên đầu ra hai nhánh đều thuộc $\mathbb{R}^{d_h}$:
+\begin{equation}
+\mathbf{q}_v = \mathbf{W}_Q\mathbf{h}_v^{(0)}, \quad \mathbf{k}_u = \mathbf{W}_K\mathbf{h}_u^{(0)}, \quad \mathbf{r}_u = \mathbf{W}_V\mathbf{h}_u^{(0)}.
+\end{equation}
+Với $u \in \mathcal{C}_k(v)$,
+\begin{equation}
+e_{vu} = \frac{\mathbf{q}_v^\top \mathbf{k}_u}{\sqrt{d_k}},
+\end{equation}
+và
+\begin{equation}
+\beta_{vu} = \frac{\exp(e_{vu})}{\sum_{u' \in \mathcal{C}_k(v)} \exp(e_{vu'})}.
+\end{equation}
+Đầu ra của nhánh không cục bộ là
+\begin{equation}
+\mathbf{z}_v^G = \sum_{u \in \mathcal{C}_k(v)} \beta_{vu}\mathbf{r}_u.
+\end{equation}
+
+\paragraph{Độ phức tạp tính toán.} Sau khi có tập ứng viên, phép tính điểm và tổng hợp attention tốn $\mathcal{O}(Nk d_h)$; các phép chiếu query, key, value còn tốn $\mathcal{O}(N d_h^2)$. Với $T$ epoch và $L=L_{\text{local}}$, chi phí huấn luyện toàn mô hình, bỏ qua hệ số hằng của lan truyền ngược, xấp xỉ
+\begin{equation}
+\begin{aligned}
+T_{\text{total}} &= T_{\text{pre}} + T_{\text{retrieval}} + T\,T_{\text{epoch}},\\
+T_{\text{epoch}} &= \mathcal{O}\!\left(N d d_h + (L+1)N d_h^2\right.\\
+&\qquad\left.{}+ L|E|d_h + Nk d_h + N d_h C\right).
+\end{aligned}
+\end{equation}
+Nếu thực hiện exact nearest-neighbor search bằng cách so sánh mọi cặp nút thì
+\begin{equation}
+T_{\text{retrieval}} = \mathcal{O}(N^2 d).
+\end{equation}
+$T_{\text{pre}}=\mathcal{O}((N+|E|)d)$ gồm chuẩn hóa đặc trưng và tính proxy. Công thức retrieval trên mô tả chi phí so sánh; lựa chọn Top-$k$ còn có chi phí phụ thuộc cách cài đặt. Dự án ưu tiên exact blockwise Top-$k$ tính một lần và lưu tối đa $Nk$ chỉ số. Blockwise giảm bộ nhớ tạm nhưng không loại bỏ số phép so sánh bậc hai. Approximate nearest neighbor chỉ là mở rộng và phải báo cáo chất lượng truy hồi so với exact trên một mẫu nút. Với attention thưa, bộ nhớ điểm số là $\mathcal{O}(Nk)$; cài đặt gom toàn bộ vector ứng viên có thể cần $\mathcal{O}(Nk d_h)$, nên phải đo bộ nhớ thực tế và chia block khi cần.
+
+\subsection{Proxy homophily không nhãn}
+Trước khi tính độ tương đồng, mỗi vector đặc trưng được chuẩn hóa theo
+chuẩn $\ell_2$:
+\[
+\bar{x}_v =
+\begin{cases}
+\dfrac{x_v}{\|x_v\|_2}, & \|x_v\|_2>0,\\[4pt]
+\mathbf{0}, & \|x_v\|_2=0.
+\end{cases}
+\]
+Do đó, $\bar{x}_v^\top\bar{x}_u$ là độ tương đồng cosine khi cả hai vector
+đều khác vector không. Với vector đặc trưng bằng không, độ tương đồng
+được xem là bằng $0$. Với mỗi nút $v$ có $d_v>0$, định nghĩa
+\begin{equation}
+s_v = \frac{1}{d_v} \sum_{u \in \mathcal{N}(v)} \bar{\mathbf{x}}_v^\top \bar{\mathbf{x}}_u.
+\end{equation}
+
+Đại lượng $s_v$ chỉ sử dụng đặc trưng và cấu trúc đồ thị, không sử dụng
+nhãn nút. Local node homophily $h_{\mathrm{node}}(v)$ chỉ được tính sau
+khi hoàn tất thí nghiệm để phân tích hậu nghiệm; đại lượng này không
+được dùng làm đầu vào, tinh chỉnh siêu tham số hoặc lựa chọn checkpoint.
+\medskip
+
+Với nút cô lập, $s_v = 0$. Sau đó, chuẩn hóa trên toàn đồ thị
+\begin{equation}
+\tilde{s}_v = \frac{s_v - \mu_s}{\sigma_s + \varepsilon}.
+\end{equation}
+
+Bậc nút cũng được biến đổi và chuẩn hóa
+\begin{equation}
+\tilde{d}_v = \text{Standardize}\left(\log(1 + d_v)\right).
+\end{equation}
+Trong cả hai phép chuẩn hóa, dùng trung bình và độ lệch chuẩn trên $V$, với $\varepsilon=10^{-8}$; biến có phương sai bằng $0$ được ánh xạ về $0$. Việc sử dụng đặc trưng và cấu trúc của toàn đồ thị phù hợp với thiết lập transductive, không sử dụng nhãn validation/test. Đặc trưng đầu vào giữ theo bản phát hành benchmark; bản chuẩn hóa $\ell_2$ chỉ dùng cho retrieval và proxy.
+
+\begin{definition}[Proxy homophily không nhãn]
+Trong dự án này, $s_v$ được gọi là proxy homophily không nhãn theo nghĩa nó là một thống kê quan sát được từ đặc trưng và cấu trúc đồ thị, được giả thuyết là có thể mang thông tin về mức độ tin cậy của lân cận cục bộ. Thuật ngữ proxy không hàm ý rằng $s_v = h_{\text{node}}(v)$ hoặc rằng hai đại lượng luôn có tương quan mạnh.
+\end{definition}
+
+\subsection{Node-wise gate với đường tín hiệu tường minh}
+Thay vì đưa $s_v$ vào cùng một MLP lớn như một đặc trưng thông thường, dự án sử dụng một đường tín hiệu riêng:
+\begin{equation}
+\alpha_v = \sigma\left(\gamma \tilde{s}_v + g_\theta\left([\tilde{d}_v \,\|\, \mathbf{z}_v^L \,\|\, \mathbf{z}_v^G]\right)\right), \quad \alpha_v \in (0, 1),
+\end{equation}
+trong đó $g_\theta$ là một MLP hai lớp nhỏ và $\gamma$ là một tham số scalar học được.
+
+Trong thiết lập chính, $\gamma$ không bị ràng buộc dấu. Điều này tránh việc áp đặt trước giả định rằng similarity đặc trưng cao luôn hàm ý nhánh cục bộ đáng tin cậy hơn. Một phiên bản $\gamma = \text{softplus}(\rho) \ge 0$ sẽ được xem xét trong ablation study.
+
+Biểu diễn cuối cùng của nút $v$ là
+\begin{equation}
+\mathbf{z}_v = \alpha_v \mathbf{z}_v^L + (1 - \alpha_v)\mathbf{z}_v^G.
+\end{equation}
+
+\begin{remark}
+Việc đưa $s_v$ vào gate không được xem là một dạng regularization theo nghĩa toán học. Vai trò chính của đường tín hiệu tường minh là làm cho cơ chế gating dễ diễn giải và dễ kiểm chứng hơn: có thể phân tích trực tiếp mối quan hệ giữa $s_v$, $\alpha_v$, oracle local homophily và hiệu quả tương đối của hai nhánh.
+\end{remark}
+
+\subsection{Bộ phân loại và hàm mất mát}
+\paragraph{Giới hạn diễn giải cổng.}
+Khi giữ các đầu vào khác cố định, $\partial\alpha_v/\partial\tilde{s}_v=\gamma\alpha_v(1-\alpha_v)$. Tuy nhiên, dấu của $\gamma$ không chứng minh tác động nhân quả của homophily: hai embedding cũng phụ thuộc vào đặc trưng và cấu trúc. Cổng trộn embedding, không phải xác suất của hai bộ phân loại độc lập, nên $\alpha_v$ không được hiểu là xác suất nhánh cục bộ dự đoán đúng. Dự án báo cáo phân bố cổng và tỷ lệ $\alpha_v<0.05$ hoặc $\alpha_v>0.95$ để phát hiện cổng bão hòa hay chỉ sử dụng một nhánh.
+
+Với bài toán đa lớp, $\mathbf{W}_{\text{out}}\in\mathbb{R}^{C\times d_h}$ và $\mathbf{b}\in\mathbb{R}^C$,
+\begin{equation}
+\mathbf{o}_v = \mathbf{W}_{\text{out}}\mathbf{z}_v + \mathbf{b},
+\end{equation}
+và
+\begin{equation}
+\hat{\mathbf{y}}_v = \text{softmax}(\mathbf{o}_v).
+\end{equation}
+Cross-entropy loss được tính trên tập huấn luyện
+\begin{equation}
+\mathcal{L}_{\text{CE}} = -\frac{1}{|V_{\text{train}}|} \sum_{v \in V_{\text{train}}} \log \hat{y}_{v, y_v}.
+\end{equation}
+Với các bài toán nhị phân, sử dụng một logit $o_v$ và
+\begin{equation}
+p_v = \sigma(o_v).
+\end{equation}
+Binary cross-entropy được định nghĩa bởi
+\begin{equation}
+\mathcal{L}_{\text{BCE}} = -\frac{1}{|V_{\text{train}}|} \sum_{v \in V_{\text{train}}} \left[y_v \log p_v + (1 - y_v)\log(1 - p_v)\right].
+\end{equation}
+Hàm mất mát tổng quát có dạng
+\begin{equation}
+\mathcal{L} = \mathcal{L}_{\text{CE/BCE}} + \lambda \|\Theta\|_2^2,
+\end{equation}
+trong đó bản thu gọn cố định $\lambda=0$; việc tinh chỉnh bằng validation thuộc phần mở rộng. Dùng Adam tối ưu trực tiếp hàm mất mát này; không cộng thêm weight decay riêng để tránh phạt hai lần. CE/BCE được tính bằng dạng ổn định số từ logits. Gradient đi qua encoder, attention và gate; tập ứng viên Top-$k$ và proxy được giữ cố định, không cần lấy đạo hàm qua phép truy hồi.
+
+\subsection{Thuật toán}
+Các đại lượng $\bar{\mathbf{X}}$, $\{s_v\}_{v \in V}$ và $\{\mathcal{C}_k(v)\}_{v \in V}$ được precompute trước quá trình huấn luyện vì chúng chỉ phụ thuộc vào đặc trưng và cấu trúc đồ thị.
+
+\begin{algorithm}[H]
+\caption{Forward pass của mô hình local–global đề xuất}
+\label{alg:forward_pass}
+\begin{algorithmic}[1]
+\Require Đồ thị $G = (V, E)$; ma trận đặc trưng $\mathbf{X}$; tập ứng viên $\{\mathcal{C}_k(v)\}_{v \in V}$; proxy $\{\tilde{s}_v\}_{v \in V}$; degree feature $\{\tilde{d}_v\}_{v \in V}$.
+\Ensure Logit dự đoán $\mathbf{O}$ cho mọi nút.
+\State $\mathbf{H}^{(0)} \gets \phi_{\text{in}}(\mathbf{X})$
+\State $\mathbf{Z}^L \gets f_{\text{local}}(\mathbf{H}^{(0)}, \mathbf{A})$
+\State $\mathbf{Z}^G \gets f_{\text{global}}\left(\mathbf{H}^{(0)}, \{\mathcal{C}_k(v)\}_{v \in V}\right)$
+\For{each $v \in V$}
+    \State $\alpha_v \gets \sigma\left(\gamma \tilde{s}_v + g_\theta([\tilde{d}_v; \mathbf{z}_v^L; \mathbf{z}_v^G])\right)$
+    \State $\mathbf{z}_v \gets \alpha_v \mathbf{z}_v^L + (1 - \alpha_v)\mathbf{z}_v^G$
+\EndFor
+\State $\mathbf{O} \gets \mathbf{Z}\mathbf{W}_{\text{out}}^\top + \mathbf{1}\mathbf{b}^\top$
+\State \Return $\mathbf{O}$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Thiết kế thực nghiệm}
+
+\paragraph{Bộ dữ liệu và giao thức.}
+Với giới hạn CPU và RAM 8 GB, thực nghiệm chính thu gọn sử dụng Minesweeper thuộc benchmark của Platonov và cộng sự~\cite{platonov2023critical}. Roman-empire là bộ dữ liệu mở rộng khi đủ tài nguyên, nhằm kiểm tra thêm bài toán đa lớp. Nhóm sử dụng phiên bản dữ liệu và cách chia
+tập được phát hành cùng benchmark, đồng thời ghi lại nguồn dữ liệu, phiên
+bản và các thông số cơ bản của từng đồ thị trong báo cáo.
+
+Đây là thiết lập transductive: đặc trưng và cấu trúc đồ thị của toàn bộ
+các nút được quan sát trong quá trình huấn luyện, nhưng chỉ nhãn của tập
+huấn luyện được dùng để tối ưu mô hình. Nhãn validation chỉ được dùng
+cho early stopping và lựa chọn siêu tham số. Nhãn test chỉ được dùng
+trong lần đánh giá cuối cùng.
+
+\paragraph{Các mô hình đối chứng.}
+Các phương pháp sau được so sánh trên cùng tập dữ liệu và cùng giao thức:
+
+\begin{enumerate}
+    \item MLP, chỉ sử dụng đặc trưng nút;
+    \item GCN local-only, chỉ sử dụng nhánh cục bộ;
+    \item restricted attention global-only, chỉ sử dụng nhánh attention;
+    \item fixed fusion, kết hợp hai nhánh với trọng số cố định
+    $\alpha_v=0.5$;
+    \item learned gate, sử dụng cổng học được nhưng bỏ thành phần
+    proxy $\gamma\widetilde{s}_v$;
+    \item proposed gate, mô hình đầy đủ có proxy tương đồng tường minh.
+    \item H$_2$GCN~\cite{zhu2020h2gcn}, đối chứng chuyên cho heterophily trong phần mở rộng. Mã triển khai hiện tại là bản PyTorch viết lại dựa trên kiến trúc và mã TensorFlow tác giả, dùng cùng split và chỉ số đánh giá; chưa kiểm chứng tương đương số học với bản gốc và cần ghi rõ điều này khi báo cáo.
+\end{enumerate}
+
+Các mô hình chính dùng cấu hình chung cố định và cùng quy tắc
+early stopping. Kết quả từ bài báo gốc chỉ được dùng làm tham khảo nếu
+split, tiền xử lý và giao thức đánh giá tương thích với thí nghiệm này.
+
+\paragraph{Đặc điểm dữ liệu và tiền xử lý.}
+Minesweeper là dữ liệu tổng hợp với đặc trưng rời rạc và một phần đặc trưng bị ẩn; adjusted homophily gần $0$ trong benchmark~\cite{platonov2023critical}. Đây là trường hợp kiểm tra giới hạn của proxy, không nên mặc định coi là đồ thị có xu hướng nối khác lớp mạnh. Giữ nguyên mã hóa phần đặc trưng bị ẩn của bản phát hành, không khôi phục bằng nhãn. Với cả hai bộ dữ liệu, kiểm tra cạnh trùng, self-loop, nút cô lập và mask chia tập; ghi lại số nút, số cạnh vô hướng, số chiều đặc trưng, số lớp và phân bố lớp. Không tái tạo đặc trưng từ nhãn của bất kỳ split nào.
+
+\paragraph{Ngân sách tinh chỉnh và tính tái lập.}
+Giao thức thu gọn sử dụng ba split có chỉ số 0, 1, 2 từ các mask chính thức, giữ tỷ lệ train/validation/test $50/25/25$. Seed huấn luyện tương ứng là 42, 43, 44, dùng giống nhau giữa các phương pháp. Dùng một cấu hình cố định, không random search. Sáu mô hình chính và ba biến thể bổ sung (shuffled proxy, random-$k$, nối proxy vào MLP) tạo thành 27 lượt huấn luyện. Bỏ proxy đã được bao phủ bởi learned gate nên không tính thêm lượt trùng. Khóa giao thức trước khi mở kết quả test. Đây là đánh giá thăm dò trên một đồ thị với ngân sách hạn chế, không tương đương benchmark đầy đủ trên 10 split.
+
+Cấu hình cố định: $d_h=64$, learning rate $10^{-3}$, $\lambda=0$, hai lớp GCN, $k=8$, cổng có lớp ẩn 32 chiều với ReLU, khởi tạo $\gamma=0$. Encoder tuyến tính kèm ReLU được dùng chung cho hai nhánh. Dropout 0.3 đặt sau ReLU của mỗi lớp GCN; không dùng residual hoặc LayerNorm trong cấu hình thu gọn. Attention một đầu, không dropout; dùng hai luồng CPU, block retrieval 64 nút và block attention 256 nút. Mỗi lượt tối đa 200 epoch, patience 30 theo ROC-AUC validation; hòa điểm lấy checkpoint sớm hơn. Lưu cấu hình, phiên bản, seed, số tham số, checkpoint và log, kể cả lỗi tài nguyên. Lượt đo tốc độ ban đầu chạy 30 epoch trên split 0, seed 42, chỉ tính train/validation và không dùng để kết luận chất lượng cuối cùng.
+
+So sánh mô hình chính và ablation dùng cấu hình chung đã cố định, mỗi biến thể huấn luyện lại từ đầu. Không tuyên bố các baseline đã được tinh chỉnh tối ưu. Learned gate giữ nguyên MLP của cổng và chỉ cố định $\gamma=0$, nên khác biệt số tham số học được chỉ là một scalar. Độ nhạy theo $k$ và tìm kiếm siêu tham số được chuyển sang phần mở rộng.
+
+\paragraph{Chỉ số đánh giá và độ ổn định.}
+Theo benchmark~\cite{platonov2023critical}, chỉ số chính là accuracy cho Roman-empire và ROC-AUC cho Minesweeper; dùng đúng chỉ số này cho early stopping và chọn cấu hình. Báo cáo macro-F1 bổ sung, cùng accuracy và PR-AUC cho Minesweeper nếu cần phân tích mất cân bằng lớp. ROC-AUC tính từ điểm dự đoán liên tục; các chỉ số cần nhãn nhị phân dùng ngưỡng $0.5$ đã cố định, không tối ưu ngưỡng trên test. Kết quả được trình bày dưới dạng trung bình và độ lệch chuẩn mẫu trên ba split của giao thức thu gọn:
+\[
+\text{mean}\pm\text{std}.
+\]
+Nhóm báo cáo số seed/split thực tế đã chạy và không chọn lại seed dựa
+trên kết quả test.
+Đối với proposed gate và learned gate, báo cáo thêm chênh lệch chỉ số theo từng cặp split, trung bình chênh lệch và số split cải thiện. Các split có thể chồng lấp nút, nên không xem chúng là 10 đồ thị độc lập và không dùng kiểm định độc lập trên từng nút để tuyên bố ý nghĩa thống kê. Khi có tài nguyên, chạy thêm ba seed trên cấu hình đã khóa để tách biến thiên khởi tạo khỏi biến thiên chia tập.
+
+Ngoài chất lượng phân loại, nhóm ghi nhận thời gian tạo tập ứng viên
+$\mathcal{C}_k(v)$, thời gian mỗi epoch và tổng thời gian huấn luyện.
+Nếu môi trường cho phép, nhóm cũng báo cáo bộ nhớ đỉnh. Thời gian truy
+xuất ứng viên được đo riêng với thời gian attention sau khi đã có danh
+sách ứng viên.
+
+\paragraph{Thí nghiệm ablation.}
+Các ablation chính gồm:
+\begin{enumerate}
+    \item bỏ proxy khỏi cổng để so sánh với learned gate;
+    \item hoán vị giá trị proxy giữa các nút để kiểm tra liệu việc gắn
+    proxy với đúng nút có quan trọng hay không;
+    \item thay tập ứng viên Top-$k$ theo similarity bằng tập random-$k$.
+    \item đưa proxy vào MLP bằng phép nối đầu vào, thay vì đường cộng $\gamma\tilde{s}_v$, để phân biệt lợi ích của thông tin proxy với lợi ích của cách đưa thông tin đó vào cổng.
+\end{enumerate}
+Hoán vị proxy một lần cho mỗi seed và giữ cố định trong suốt huấn luyện/đánh giá; chỉ thay đầu vào proxy của cổng, giữ nguyên retrieval. Random-$k$ lấy không hoàn lại từ đúng $\mathcal{U}(v)$, giữ cùng $k_v$ và cố định theo seed. Báo cáo số tham số của biến thể nối proxy vì kích thước đầu vào MLP tăng. Phân tích nhạy cảm với $k$ thuộc phần mở rộng, với các giá trị định trước và không chọn lại theo test.
+Full attention chỉ được chạy trên bộ dữ liệu đủ nhỏ và nếu bộ nhớ cho
+phép. Đây là thí nghiệm mở rộng, không phải điều kiện bắt buộc để hoàn
+thành project.
+
+Sau khi hoàn tất đánh giá, nhóm phân tích tương quan giữa $s_v$ và
+$h_{\mathrm{node}}(v)$, cũng như mối quan hệ giữa $s_v$, giá trị cổng
+$\alpha_v$ và kết quả dự đoán. Phân tích này chỉ nhằm giải thích kết quả,
+không được dùng để chọn mô hình hoặc siêu tham số.
+
+\paragraph{Đo lợi ích tương đối của hai nhánh.}
+Trên các nút test, lấy xác suất từ hai baseline local-only và global-only đã được huấn luyện riêng và chọn checkpoint bằng validation. Đặt
+\begin{equation}
+\Delta_v=\ell_v^G-\ell_v^L,
+\end{equation}
+trong đó $\ell_v^L,\ell_v^G$ là CE/BCE từng nút. Khi $\Delta_v>0$, baseline cục bộ có loss thấp hơn. Báo cáo Spearman giữa $s_v$ và $\Delta_v$, giữa $s_v$ và $h_{\text{node}}(v)$ trên nút test có bậc dương, cùng đồ thị trung bình $\Delta_v$ theo các nhóm phân vị proxy. Với biến hằng, ghi tương quan không xác định thay vì gán bằng $0$. Các nhóm phân vị được xác định từ proxy không nhãn và giữ cố định. Phân tích này đo lợi ích của hai baseline độc lập, không đồng nhất với chất lượng từng nhánh đã đồng thích nghi trong mô hình lai. Nhãn của lân cận test chỉ được dùng để tính oracle homophily sau khi khóa thí nghiệm.
+
+\paragraph{Nguyên tắc kết luận.}
+Nếu proposed gate cải thiện ổn định so với learned gate trong cùng ngân
+sách tinh chỉnh, kết quả cung cấp bằng chứng rằng proxy có ích trên các
+bộ dữ liệu đã thử. Tương quan yếu với local node homophily chỉ bác bỏ cách diễn giải proxy như một chỉ báo homophily trong thiết lập đã thử; nó không tự động chứng minh proxy vô ích cho phân loại. Ngược lại, tương quan mạnh chưa đủ chứng minh lợi ích của cổng. Lợi ích dự đoán phải được xác nhận bằng so sánh learned gate, shuffled proxy và biến thể nối proxy. Nếu không có cải thiện ổn định, nhóm kết luận chưa có bằng chứng đủ mạnh về lợi ích dự đoán. Kết quả đó vẫn có giá trị vì dự án kiểm tra giả thuyết bằng đối
+chứng cụ thể, thay vì giả định trước mô hình phải vượt baseline.
+
+\section{Kết quả và đóng góp dự kiến}
+Proxy $s_v$ được kỳ vọng cung cấp tín hiệu hữu ích trên các bộ dữ liệu mà độ tương đồng đặc trưng phản ánh phần nào độ tin cậy của lân cận cục bộ. Trong những trường hợp đó, explicit gate có thể cải thiện so với fixed fusion hoặc learned-only gate. Ngược lại, nếu feature–label alignment yếu, $s_v$ có thể có tương quan thấp với local homophily và không đem lại cải thiện đáng kể.
+
+Các đóng góp dự kiến của dự án gồm:
+\begin{enumerate}
+    \item xây dựng một protocol đánh giá tái lập được cho node-wise local–global routing trên các benchmark heterophily hiện đại;
+    \item định lượng mối quan hệ giữa feature-based proxy $s_v$, oracle local homophily $h_{\text{node}}(v)$, giá trị gate $\alpha_v$ và lợi ích tương đối của hai nhánh;
+    \item đánh giá lợi ích của thông tin proxy và của đường tín hiệu tường minh thông qua đối chứng bỏ proxy, hoán vị proxy và nối proxy vào MLP, kèm số tham số của từng biến thể;
+    \item phân tích trade-off giữa local aggregation, restricted non-local attention và chi phí tính toán.
+\end{enumerate}
+
+\begin{remark}
+Dự án không giả định trước rằng mô hình đề xuất sẽ vượt tất cả các baseline. Một kết quả âm vẫn có giá trị khoa học. Nếu shuffled proxy cho kết quả tương đương proxy thật, thí nghiệm chưa chứng minh lợi ích của việc gắn proxy với đúng nút. Nếu chỉ có $\Spearman(s_v,h_{\text{node}}(v))$ gần $0$, kết luận giới hạn ở khả năng phản ánh homophily; lợi ích dự đoán cần được đánh giá riêng. Không lựa chọn lại dataset hoặc siêu tham số dựa trên test để duy trì giả thuyết ban đầu.
+\end{remark}
+
+\section{Kịch bản demo dự kiến}
+\label{sec:demo}
+Demo được xây dựng dưới dạng notebook tương tác, sử dụng checkpoint đã huấn luyện và cấu hình đã khóa từ thực nghiệm. Mục tiêu là minh họa dự đoán phân loại nút, nguồn thông tin của hai nhánh và cách cổng kết hợp biểu diễn. Demo chính sử dụng Minesweeper, hiển thị các nút dưới dạng bàn cờ theo ánh xạ nút--tọa độ được kiểm tra từ dữ liệu. Mô hình suy luận trên toàn đồ thị; giao diện có thể chỉ hiển thị một vùng nhỏ để dễ quan sát.
+
+Kịch bản trình bày gồm bốn bước:
+\begin{enumerate}
+    \item Nạp dữ liệu, split và checkpoint; hiển thị bàn cờ với màu biểu diễn xác suất có mìn, đồng thời phân biệt các nút train, validation và test.
+    \item Chọn một nút test $v$ để xem đặc trưng quan sát được, lân cận một bước $\mathcal{N}(v)$ và tập ứng viên không cục bộ $\mathcal{C}_k(v)$. Hiển thị proxy $s_v$, cổng $\alpha_v$ và trọng số attention $\beta_{vu}$ của các ứng viên. Khi GCN có nhiều lớp, ghi rõ vùng tiếp nhận thông tin có thể vượt quá lân cận một bước đang được tô sáng.
+    \item So sánh xác suất và nhãn dự đoán của GCN local-only, attention global-only, learned gate và proposed gate trên cùng nút, cùng split. Nhãn thật được bật riêng để đối chiếu sau dự đoán; trình bày cả trường hợp đúng và sai để thảo luận giới hạn.
+    \item Hiển thị bảng ROC-AUC tổng hợp của Minesweeper, kết quả ablation bỏ/hoán vị proxy và biểu đồ proxy--homophily, proxy--cổng đã thu được từ thực nghiệm. Kết quả trên vài nút minh họa được phân biệt với đánh giá trên toàn bộ tập test.
+\end{enumerate}
+
+Cổng $\alpha_v$ biểu thị hệ số trộn hai embedding, không phải xác suất nhánh cục bộ dự đoán đúng; trọng số attention chỉ mô tả phép tổng hợp của mô hình, không tự nó chứng minh quan hệ nhân quả. Nhãn test và oracle homophily chỉ phục vụ đối chiếu hậu nghiệm, không được đưa vào đầu vào suy luận. Demo giữ nguyên đặc trưng benchmark, không thực hiện thao tác mở ô để cập nhật đặc trưng như một chương trình tự chơi dò mìn.
+
+\paragraph{Đưa demo hoàn chỉnh vào báo cáo cuối kỳ.}
+Khi có sản phẩm thực tế, mục này được cập nhật thành \textit{Demo hệ thống và minh họa kết quả}, đặt sau phần \textit{Kết quả thực nghiệm và thảo luận}. Nội dung gồm ảnh chụp giao diện có chú thích, một lượt thao tác minh họa, dự đoán và giá trị cổng thực tế, cùng các hạn chế quan sát được. Bảng chỉ số và ablation đầy đủ nằm trong phần kết quả thực nghiệm; hướng dẫn chạy, đường dẫn mã nguồn/notebook, checkpoint và video minh họa (nếu có) nằm trong phụ lục hướng dẫn tái lập. Các đường dẫn chỉ được bổ sung khi sản phẩm đã tồn tại và đã kiểm tra chạy được.
+
+\section{Kế hoạch thực hiện và sản phẩm bàn giao}
+Kế hoạch tham chiếu gồm sáu tuần, có thể điều chỉnh theo lịch học và phần cứng thực tế:
+\begin{enumerate}
+    \item Tuần 1: kiểm tra dữ liệu, mask và tiền xử lý; cài MLP/GCN; đo thời gian, bộ nhớ trên một cấu hình để xác định ngân sách khả thi.
+    \item Tuần 2: cài restricted attention, proxy và gate; kiểm tra kích thước tensor, mask loss, ứng viên rỗng và bảo đảm nhãn ngoài train không đi vào bước cập nhật tham số.
+    \item Tuần 3: hoàn thiện sáu mô hình chính và ablation; khóa cấu hình thu gọn, seed và quy tắc đánh giá.
+    \item Tuần 4: chạy đánh giá chính trên ba split, thu thập thời gian và bộ nhớ.
+    \item Tuần 5: hoàn thành ablation bắt buộc và phân tích hậu nghiệm theo kế hoạch đã định.
+    \item Tuần 6: hoàn thiện notebook demo theo Mục~\ref{sec:demo}, kiểm tra chạy từ checkpoint, tổng hợp báo cáo, thảo luận giới hạn và chuẩn bị trình bày kết quả.
+\end{enumerate}
+
+Phạm vi bắt buộc thu gọn gồm Minesweeper, sáu mô hình chính, ba biến thể ablation bổ sung trên ba split và phân tích proxy/cổng/chi phí. Roman-empire, H$_2$GCN, tìm kiếm siêu tham số, độ nhạy theo $k$, GAT, full attention, loại lân cận hai bước, ràng buộc $\gamma\geq0$ và approximate retrieval là phần mở rộng. Việc thiếu đối chứng chuyên cho heterophily và chỉ dùng một bộ dữ liệu giới hạn kết luận vào cơ chế cổng trong thiết lập này. Mọi thay đổi ngân sách cần ghi nhận trước khi xem test; không bỏ lượt có kết quả kém.
+
+Sản phẩm bàn giao gồm mã nguồn có lệnh tái lập; tệp cấu hình và môi trường; log theo từng split/seed; bảng kết quả chính và ablation; biểu đồ proxy, cổng và chi phí; notebook demo kèm checkpoint, hướng dẫn chạy và ảnh minh họa; báo cáo giải thích kết quả kể cả khi giả thuyết không được ủng hộ. Tiêu chí hoàn thành là trả lời các câu hỏi nghiên cứu bằng bằng chứng có đối chứng, không đặt điều kiện mô hình đề xuất phải vượt baseline. Bản đề xuất hiện tại chưa chứa kết quả thực nghiệm đã đo.
+
+\clearpage
+
+\renewcommand{\refname}{Tài liệu tham khảo}
+\phantomsection
+\addcontentsline{toc}{section}{Tài liệu tham khảo}
+\begin{thebibliography}{9}
+
+\bibitem{kipf2017gcn}
+T. N. Kipf and M. Welling.
+Semi-Supervised Classification with Graph Convolutional Networks.
+\textit{International Conference on Learning Representations (ICLR)}, 2017.
+\url{https://arxiv.org/abs/1609.02907}
+
+\bibitem{velickovic2018gat}
+P. Veli\v{c}kovi\'c, G. Cucurull, A. Casanova, A. Romero, P. Li\`o,
+and Y. Bengio.
+Graph Attention Networks.
+\textit{International Conference on Learning Representations (ICLR)}, 2018.
+\url{https://arxiv.org/abs/1710.10903}
+
+\bibitem{pei2020geom}
+H. Pei et al.
+Geom-GCN: Geometric Graph Convolutional Networks.
+\textit{International Conference on Learning Representations (ICLR)}, 2020.
+\url{https://arxiv.org/abs/2002.05287}
+
+\bibitem{zhu2020h2gcn}
+J. Zhu et al.
+Beyond Homophily in Graph Neural Networks: Current Limitations and
+Effective Designs.
+\textit{Advances in Neural Information Processing Systems (NeurIPS)}, 2020.
+\url{https://arxiv.org/abs/2006.11468}
+
+\bibitem{platonov2023critical}
+O. Platonov, D. Kuznedelev, M. Diskin, A. Babenko, and L. Prokhorenkova.
+A Critical Look at the Evaluation of GNNs Under Heterophily:
+Are We Really Making Progress?
+\textit{International Conference on Learning Representations (ICLR)}, 2023.
+\url{https://arxiv.org/abs/2302.11640}
+
+\bibitem{rampasek2022gps}
+L. Ramp\'a\v{s}ek et al.
+Recipe for a General, Powerful, Scalable Graph Transformer.
+\textit{Advances in Neural Information Processing Systems (NeurIPS)}, 2022.
+\url{https://arxiv.org/abs/2205.12454}
+
+\end{thebibliography}
+
+\end{document}
+
