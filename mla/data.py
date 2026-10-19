@@ -1,5 +1,8 @@
 """Label-free graph preprocessing, reproducible retrieval, official dataset loader."""
 import time
+import json
+import subprocess
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -10,25 +13,47 @@ import torch
 from .utils import digest, file_hash, read_json, write_json
 
 DATASETS = {'minesweeper': (2, 'roc_auc'), 'roman-empire': (18, 'accuracy')}
+REMOTE_FILES = {'minesweeper': 'minesweeper.npz', 'roman-empire': 'roman_empire.npz'}
 CACHE_VERSION = 1
 
 
-def download(root, names):
-    root = Path(root)
-    root.mkdir(parents=True, exist_ok=True)
+def source_commit():
+    """Resolve an immutable revision, with Git fallback for GitHub API limits."""
     req = urllib.request.Request('https://api.github.com/repos/yandex-research/heterophilous-graphs/commits/main',
                                  headers={'User-Agent': 'mla-course-project'})
-    import json
-    with urllib.request.urlopen(req, timeout=60) as response:
-        commit = json.load(response)['sha']
+    try:
+        with urllib.request.urlopen(req, timeout=60) as response:
+            commit = json.load(response)['sha']
+    except (urllib.error.URLError, TimeoutError):
+        try:
+            result = subprocess.run(
+                ['git', 'ls-remote', 'https://github.com/yandex-research/heterophilous-graphs.git',
+                 'refs/heads/main'], capture_output=True, text=True, check=True, timeout=60)
+            commit = result.stdout.split()[0]
+        except (OSError, subprocess.SubprocessError, IndexError) as exc:
+            raise RuntimeError('Cannot resolve dataset revision. Check network access and install Git '
+                               'for the GitHub API fallback, or download the files manually.') from exc
+    if len(commit) != 40 or any(c not in '0123456789abcdef' for c in commit):
+        raise ValueError('Invalid source commit returned by GitHub')
+    return commit
+
+
+def download(root, names):
+    names = list(names)
     for name in names:
         if name not in DATASETS:
             raise ValueError(name)
+    root = Path(root)
+    root.mkdir(parents=True, exist_ok=True)
+    commit = None
+    for name in names:
         path = root / f'{name}.npz'
         if path.exists():
             print(f'Keep existing {path}; SHA256={file_hash(path)}')
             continue
-        url = f'https://raw.githubusercontent.com/yandex-research/heterophilous-graphs/{commit}/data/{name}.npz'
+        if commit is None:
+            commit = source_commit()
+        url = f'https://raw.githubusercontent.com/yandex-research/heterophilous-graphs/{commit}/data/{REMOTE_FILES[name]}'
         temp = path.with_suffix('.download')
         with urllib.request.urlopen(url, timeout=180) as src, open(temp, 'wb') as dst:
             import shutil

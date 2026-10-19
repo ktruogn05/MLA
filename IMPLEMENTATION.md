@@ -2,6 +2,8 @@
 
 Cập nhật 19/10/2026 theo yêu cầu viết mã full plan nhưng chưa chạy. Mã Python, JSON config và notebook đã được chuẩn bị; kiểm tra tĩnh không đồng nghĩa kiểm chứng runtime hoặc kết quả thực nghiệm. Tests được viết để chạy trên máy đích.
 
+Sửa downloader ngày 19/10/2026: ánh xạ file nguồn `roman_empire.npz` sang tên local `roman-empire.npz`, thêm Git fallback khi GitHub API giới hạn và bỏ gọi mạng nếu dữ liệu đã có. Ba kiểm tra riêng trong `tests/test_download.py` đã đạt với mạng giả lập; các tests mô hình và huấn luyện vẫn chưa chạy. Hai URL raw đã được kiểm tra HTTP 200 bằng HEAD.
+
 ## Ánh xạ plan → mã nguồn
 
 | Yêu cầu | Cài đặt |

@@ -1,6 +1,6 @@
 # GNN local–global: full experiment pipeline
 
-Mã nguồn cho đề tài trong `main.tex`, có preset full và CPU thu gọn. **Bản triển khai mới chưa chạy huấn luyện, chưa chạy test tự động hoặc kiểm chứng trên CUDA.** Kết quả pilot CPU cũ trong `CPU_BENCHMARK.md` thuộc script `benchmark_cpu.py`, không chứng nhận tốc độ/chất lượng pipeline mới.
+Mã nguồn cho đề tài trong `main.tex`, có preset full và CPU thu gọn. **Bản triển khai mới chưa chạy huấn luyện, tests mô hình hoặc kiểm chứng trên CUDA.** Ba kiểm tra riêng cho downloader đã đạt; xem `IMPLEMENTATION.md`. Kết quả pilot CPU cũ trong `CPU_BENCHMARK.md` thuộc script `benchmark_cpu.py`, không chứng nhận tốc độ/chất lượng pipeline mới.
 
 ## 1. Có gì trong repository?
 
@@ -86,6 +86,8 @@ python -m mla.cli download --config configs/full.json
 ```
 
 Tải từ repo benchmark chính thức, ghi commit nguồn và SHA-256 cho file mới. File đã tồn tại được giữ nguyên và hash được ghi trong manifest thực nghiệm. Không đưa dataset lên GitHub.
+
+Link tải thủ công: [Minesweeper](https://raw.githubusercontent.com/yandex-research/heterophilous-graphs/main/data/minesweeper.npz) và [Roman-empire](https://raw.githubusercontent.com/yandex-research/heterophilous-graphs/main/data/roman_empire.npz). Tên file Roman-empire trên nguồn dùng dấu gạch dưới: `roman_empire.npz`. Nếu tải thủ công, đổi tên thành `data/roman-empire.npz` để khớp loader; downloader tự thực hiện ánh xạ này. Khi GitHub API bị giới hạn, downloader dùng `git ls-remote` để lấy commit nguồn. Nếu cả hai file đã tồn tại, lệnh không cần gọi mạng.
 
 ### Tìm cấu hình bằng validation
 
